@@ -1,0 +1,39 @@
+# LVGL examples/demos are useful for LVGL development itself, but this project
+# only needs the runtime library and the board-specific display backend.
+CONFIG_LV_BUILD_EXAMPLES=n
+CONFIG_LV_BUILD_DEMOS=n
+
+# GB + GBC + WiFi + audio no longer fits in IDF's default 1MB app partition.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# SD card file names are read as UTF-8 so Chinese ROM names can be rendered by
+# the external font binary instead of becoming '?'.
+CONFIG_FATFS_CODEPAGE_936=y
+CONFIG_FATFS_CODEPAGE=936
+CONFIG_FATFS_API_ENCODING_UTF_8=y
+
+# Web gamepad needs WebSocket support
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# ESP32-S3-RLCD-4.2 has 8MB OPI PSRAM; the font cache and emulator need it.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
+
+# ESP32-S3-RLCD-4.2 has 16MB Flash
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# Bluetooth HID Host for gamepad support (BLE only on ESP32-S3)
+CONFIG_BT_ENABLED=y
+CONFIG_BT_BLUEDROID_ENABLED=y
+CONFIG_BT_BLE_ENABLED=y
+CONFIG_BT_GATTC_ENABLE=y
+CONFIG_BT_GATTC_NOTIF_REG_MAX=16
+CONFIG_BT_BLE_42_FEATURES_SUPPORTED=y
+# ESP32-S3 does not support Classic BT; only BLE HID is used.
+# Classic BT HID (BT_CLASSIC_ENABLED) is disabled to save flash/RAM.
