@@ -1,0 +1,6 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# 4 MB flash, one large factory app and a 128 KiB internal filesystem.
+nvs,      data, nvs,     ,        0x4000,
+phy_init, data, phy,     ,        0x1000,
+factory,  app,  factory, ,        0x3D0000,
+flash,    data, fat,     ,        0x20000,

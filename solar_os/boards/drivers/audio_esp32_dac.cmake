@@ -1,0 +1,2 @@
+set(SOLAR_OS_BOARD_AUDIO_DRIVER "esp32_dac")
+list(APPEND SOLAR_OS_BOARD_REQUIRED_PACKAGES driver_audio_esp32_dac)
