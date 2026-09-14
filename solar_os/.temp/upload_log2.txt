@@ -1,0 +1,55 @@
+﻿Processing solar_term (board: solar_term; platform: https://github.com/pioarduino/platform-espressif32/releases/download/55.03.39/platform-espressif32.zip; framework: espidf)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+SolarOS build locking is unavailable on Windows; do not run concurrent PlatformIO builds from the same checkout
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/solar_term.html
+PLATFORM: Espressif 32 (55.3.39) > SolarTerm (Waveshare ESP32-S3-RLCD-4.2)
+HARDWARE: ESP32S3 240MHz, 320KB RAM, 7MB Flash
+DEBUG: Current (esp-builtin) On-board (esp-builtin) External (cmsis-dap, esp-bridge, esp-prog, esp-prog-2, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - contrib-piohome @ 3.4.4 
+ - framework-espidf @ 3.50504.0 (5.5.4) 
+ - tool-cmake @ 4.0.3 
+ - tool-esp-rom-elfs @ 2024.10.11 
+ - tool-esptoolpy @ 5.3.0 
+ - tool-ninja @ 1.13.1 
+ - tool-scons @ 4.40801.0 (4.8.1) 
+ - tool-xtensa-esp-elf-gdb @ 17.1.0+20260402 
+ - toolchain-xtensa-esp-elf @ 14.2.0+20260121
+pio : Using Python 3.11.7 environment at: C:\Users\tyh21\.platformio\penv\.espidf-5.5.4
+At line:17 char:1
++ pio run -e solar_term -t upload --upload-port COM6 2>&1 | Out-File -F ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Using Python 3....v\.espidf-5.5.4:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Reading CMake configuration...
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 0 compatible libraries
+Scanning dependencies...
+No dependencies
+Building in release mode
+Retrieving maximum program size .pio\build\solar_term\firmware.elf
+Checking size .pio\build\solar_term\firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [===       ]  31.1% (used 101884 bytes from 327680 bytes)
+Flash: [=======   ]  72.4% (used 5311623 bytes from 7340032 bytes)
+Configuring upload protocol...
+AVAILABLE: cmsis-dap, esp-bridge, esp-builtin, esp-prog, esp-prog-2, espota, esptool, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa
+CURRENT: upload_protocol = esptool
+Looking for upload port...
+Uploading .pio\build\solar_term\firmware.bin
+esptool v5.3.0
+Serial port COM6:
+
+A fatal error occurred: Could not open COM6, the port is busy or doesn't exist.
+(could not open port 'COM6': PermissionError(13, '拒绝访问。', None, 5))
+
+*** [upload] Error 2
+========================= [FAILED] Took 11.43 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+solar_term     FAILED    00:00:11.429
+==================== 1 failed, 0 succeeded in 00:00:11.429 ====================

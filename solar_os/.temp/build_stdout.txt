@@ -1,0 +1,71 @@
+Processing solar_term (board: solar_term; platform: https://github.com/pioarduino/platform-espressif32/releases/download/55.03.39/platform-espressif32.zip; framework: espidf)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+SolarOS build locking is unavailable on Windows; do not run concurrent PlatformIO builds from the same checkout
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/solar_term.html
+PLATFORM: Espressif 32 (55.3.39) > SolarTerm (Waveshare ESP32-S3-RLCD-4.2)
+HARDWARE: ESP32S3 240MHz, 320KB RAM, 7MB Flash
+DEBUG: Current (esp-builtin) On-board (esp-builtin) External (cmsis-dap, esp-bridge, esp-prog, esp-prog-2, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - contrib-piohome @ 3.4.4 
+ - framework-espidf @ 3.50504.0 (5.5.4) 
+ - tool-cmake @ 4.0.3 
+ - tool-esp-rom-elfs @ 2024.10.11 
+ - tool-esptoolpy @ 5.3.0 
+ - tool-ninja @ 1.13.1 
+ - tool-scons @ 4.40801.0 (4.8.1) 
+ - tool-xtensa-esp-elf-gdb @ 17.1.0+20260402 
+ - toolchain-xtensa-esp-elf @ 14.2.0+20260121
+Reading CMake configuration...
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain, Compatibility ~ soft
+Found 0 compatible libraries
+Scanning dependencies...
+No dependencies
+Building in release mode
+Compiling .pio\build\solar_term\src\main.c.o
+Linking .pio\build\solar_term\firmware.elf
+Memory Type Usage Summary
+┌─────────────────────┬──────────────┬──────────┬────────────────┬───────────────┐
+│ Memory Type/Section │ Used [bytes] │ Used [%] │ Remain [bytes] │ Total [bytes] │
+├─────────────────────┼──────────────┼──────────┼────────────────┼───────────────┤
+│ Flash Code          │      2642268 │          │                │               │
+│    .text            │      2642268 │          │                │               │
+│ Flash Data          │      2519876 │          │                │               │
+│    .rodata          │      2519620 │          │                │               │
+│    .appdesc         │          256 │          │                │               │
+│ DIRAM               │       201447 │    58.94 │         140313 │        341760 │
+│    .text            │        99563 │    29.13 │                │               │
+│    .bss             │        68096 │    19.93 │                │               │
+│    .data            │        33788 │     9.89 │                │               │
+│ External RAM        │       189496 │          │                │               │
+│    .bss             │       189496 │          │                │               │
+│ IRAM                │        16384 │    100.0 │              0 │         16384 │
+│    .text            │        15356 │    93.73 │                │               │
+│    .vectors         │         1028 │     6.27 │                │               │
+│ RTC FAST            │           84 │     1.03 │           8108 │          8192 │
+│    .text            │           84 │     1.03 │                │               │
+└─────────────────────┴──────────────┴──────────┴────────────────┴───────────────┘
+Retrieving maximum program size .pio\build\solar_term\firmware.elf
+Checking size .pio\build\solar_term\firmware.elf
+Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
+RAM:   [===       ]  31.1% (used 101884 bytes from 327680 bytes)
+Flash: [=======   ]  72.4% (used 5311623 bytes from 7340032 bytes)
+Building .pio\build\solar_term\firmware.bin
+esptool v5.3.0
+Creating ESP32-S3 image...
+Merged 3 ELF sections.
+Successfully created ESP32-S3 image.
+Creating binary "firmware.factory.bin" with:
+    Offset   | File
+ -  0x0      | bootloader.bin
+ -  0x8000   | partitions.bin
+ -  0xd000   | ota_data_initial.bin
+ -  0x10000  | firmware.bin
+Successfully created combined binary image.
+========================= [SUCCESS] Took 47.98 seconds =========================
+
+Environment    Status    Duration
+-------------  --------  ------------
+solar_term     SUCCESS   00:00:47.980
+========================= 1 succeeded in 00:00:47.980 =========================

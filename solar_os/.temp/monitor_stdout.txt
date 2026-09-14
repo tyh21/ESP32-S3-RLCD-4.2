@@ -1,0 +1,20 @@
+I (149946) NimBLE: GAP procedure initiated: discovery; 
+I (149946) NimBLE: own_addr_type=0 filter_policy=0 passive=0 limited=0 filter_duplicates=0 
+I (149946) NimBLE: duration=8000ms
+I (149946) NimBLE: 
+
+I (172879) NimBLE: GAP procedure initiated: discovery; 
+I (172879) NimBLE: own_addr_type=0 filter_policy=0 passive=0 limited=0 filter_duplicates=0 
+I (172879) NimBLE: duration=8000ms
+I (172879) NimBLE: 
+
+I (256644) NimBLE: GAP procedure initiated: discovery; 
+I (256644) NimBLE: own_addr_type=0 filter_policy=0 passive=0 limited=0 filter_duplicates=0 
+I (256644) NimBLE: duration=8000ms
+I (256644) NimBLE: 
+
+I (347238) NimBLE: GAP procedure initiated: discovery; 
+I (347238) NimBLE: own_addr_type=0 filter_policy=0 passive=0 limited=0 filter_duplicates=0 
+I (347238) NimBLE: duration=8000ms
+I (347238) NimBLE: 
+

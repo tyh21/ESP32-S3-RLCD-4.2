@@ -1,0 +1,9 @@
+﻿Processing solar_term (board: solar_term; platform: https://github.com/pioarduino/platform-espressif32/releases/download/55.03.39/platform-espressif32.zip; framework: espidf)
+--------------------------------------------------------------------------------
+pio : MissingPackageManifestError: Could not find one of 'package.json' manifest files in the package
+At line:16 char:140
++ ... latformio\penv\Scripts;$env:PATH"; pio run -e solar_term 2>&1 | Out-F ...
++                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (MissingPackageM... in the package:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
