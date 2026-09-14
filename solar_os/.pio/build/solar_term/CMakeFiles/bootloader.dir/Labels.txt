@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+/Users/tianyaohui/solar_os/.pio/build/solar_term/CMakeFiles/bootloader
+/Users/tianyaohui/solar_os/.pio/build/solar_term/CMakeFiles/bootloader.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/CMakeFiles/bootloader-complete.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+/Users/tianyaohui/solar_os/.pio/build/solar_term/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

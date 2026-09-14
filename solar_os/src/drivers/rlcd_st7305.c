@@ -1,0 +1,1934 @@
+#include "rlcd_st7305.h"
+
+#include <errno.h>
+#include <limits.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "driver/gpio.h"
+#include "esp_check.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "nvs.h"
+#include "solar_os_buses.h"
+#define RLCD_SPI_CLOCK_HZ 24000000
+#define RLCD_CONTROLLER_ROWS_PER_TILE 4
+#define RLCD_MAX_TRANSFER_BYTES 4092
+#define RLCD_IDLE_LPM_DELAY_DEFAULT_MS 1000U
+#define RLCD_IDLE_LPM_DELAY_MAX_MS 60000U
+#define RLCD_LPM_FRAME_RATE_DEFAULT 2U
+#define RLCD_LPM_FRAME_RATE_MAX 5U
+#define RLCD_HPM_FRAME_RATE_DEFAULT 0U
+#define RLCD_HPM_FRAME_RATE_MAX 3U
+#define RLCD_FRCTRL_HFRA_BIT 0x10U
+#define RLCD_FRCTRL_LFRA_MASK 0x07U
+#define RLCD_IDLE_LPM_NVS_NAMESPACE "rlcd_st7305"
+#define RLCD_IDLE_LPM_NVS_KEY "idle_lpm_ms"
+#define RLCD_LPM_FRAME_RATE_NVS_KEY "lpm_hz"
+#define RLCD_HPM_FRAME_RATE_NVS_KEY "hpm_hz"
+#define RLCD_POWER_POLICY_NVS_KEY "power"
+#define RLCD_INVERTED_NVS_KEY "inverted"
+#define RLCD_IDLE_LPM_OPTION_PREFIX "idle-lpm-ms="
+#define RLCD_LPM_HZ_OPTION_PREFIX "lpm-hz="
+#define RLCD_LPM_RATE_OPTION_PREFIX "lpm-rate="
+#define RLCD_HPM_HZ_OPTION_PREFIX "hpm-hz="
+#define RLCD_POWER_OPTION_PREFIX "power="
+#define RLCD_INVERTED_OPTION_PREFIX "inverted="
+#define RLCD_CONTROLLER_MODE_BASE_VALUES \
+    "power=<auto,hpm,lpm> inverted=<on,off> " \
+    "idle-lpm-ms=<0..60000> lpm-hz=<0.25,0.5,1,2,4,8> " \
+    "hpm-hz=<16,25.5,32,51>"
+
+static const char *TAG = "rlcd_st7305";
+static rlcd_st7305_t *active_display;
+
+static const u8x8_display_info_t st7305_300x400_display_info = {
+    .chip_enable_level = 0,
+    .chip_disable_level = 1,
+    .post_chip_enable_wait_ns = 0,
+    .pre_chip_disable_wait_ns = 0,
+    .reset_pulse_width_ms = 20,
+    .post_reset_wait_ms = 50,
+    .sda_setup_time_ns = 0,
+    .sck_pulse_width_ns = 0,
+    .sck_clock_hz = RLCD_SPI_CLOCK_HZ,
+    .spi_mode = 0,
+    .i2c_bus_clock_100kHz = 4,
+    .data_setup_time_ns = 0,
+    .write_pulse_width_ns = 0,
+    .tile_width = 38,
+    .tile_height = 50,
+    .default_x_offset = 0,
+    .flipmode_x_offset = 0,
+    .pixel_width = 300,
+    .pixel_height = 400,
+};
+
+static const u8x8_display_info_t st7305_168x384_display_info = {
+    .chip_enable_level = 0,
+    .chip_disable_level = 1,
+    .post_chip_enable_wait_ns = 0,
+    .pre_chip_disable_wait_ns = 0,
+    .reset_pulse_width_ms = 20,
+    .post_reset_wait_ms = 50,
+    .sda_setup_time_ns = 0,
+    .sck_pulse_width_ns = 0,
+    .sck_clock_hz = RLCD_SPI_CLOCK_HZ,
+    .spi_mode = 0,
+    .i2c_bus_clock_100kHz = 4,
+    .data_setup_time_ns = 0,
+    .write_pulse_width_ns = 0,
+    .tile_width = 21,
+    .tile_height = 48,
+    .default_x_offset = 0,
+    .flipmode_x_offset = 0,
+    .pixel_width = 168,
+    .pixel_height = 384,
+};
+
+typedef struct {
+    uint8_t d6[2];
+    uint8_t d1[1];
+    uint8_t c0[2];
+    uint8_t c1[4];
+    uint8_t c2[4];
+    uint8_t c4[4];
+    uint8_t c5[4];
+    uint8_t d8[2];
+    uint8_t b2[1];
+    uint8_t b3[10];
+    uint8_t b4[8];
+    uint8_t gate_timing[3];
+    uint8_t b7[1];
+    uint8_t b0[1];
+    uint8_t c9[1];
+    uint8_t m36[1];
+    uint8_t m3a[1];
+    uint8_t b9[1];
+    uint8_t b8[1];
+    uint8_t m35[1];
+    uint8_t d0[1];
+    uint8_t bb[1];
+} rlcd_controller_settings_t;
+
+typedef struct {
+    const char *name;
+    uint8_t power_mode_cmd;
+} rlcd_controller_profile_t;
+
+typedef enum {
+    RLCD_POWER_POLICY_AUTO = 0,
+    RLCD_POWER_POLICY_HPM = 1,
+    RLCD_POWER_POLICY_LPM = 2,
+} rlcd_power_policy_t;
+
+static const rlcd_controller_settings_t rlcd_waveshare_settings = {
+    .d6 = {0x17, 0x02},
+    .d1 = {0x01},
+    .c0 = {0x11, 0x04},
+    .c1 = {0x69, 0x69, 0x69, 0x69},
+    .c2 = {0x19, 0x19, 0x19, 0x19},
+    .c4 = {0x4B, 0x4B, 0x4B, 0x4B},
+    .c5 = {0x19, 0x19, 0x19, 0x19},
+    .d8 = {0x80, 0xE9},
+    .b2 = {0x02},
+    .b3 = {0xE5, 0xF6, 0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45},
+    .b4 = {0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45},
+    .gate_timing = {0x32, 0x03, 0x1F},
+    .b7 = {0x13},
+    .b0 = {0x64},
+    .c9 = {0x00},
+    .m36 = {0x48},
+    .m3a = {0x11},
+    .b9 = {0x20},
+    .b8 = {0x29},
+    .m35 = {0x00},
+    .d0 = {0xFF},
+    .bb = {0x4F},
+};
+
+static const rlcd_controller_settings_t rlcd_168x384_settings = {
+    .d6 = {0x17, 0x02},
+    .d1 = {0x01},
+    .c0 = {0x11, 0x04},
+    .c1 = {0x69, 0x69, 0x69, 0x69},
+    .c2 = {0x19, 0x19, 0x19, 0x19},
+    .c4 = {0x4B, 0x4B, 0x4B, 0x4B},
+    .c5 = {0x19, 0x19, 0x19, 0x19},
+    .d8 = {0x80, 0xE9},
+    .b2 = {0x02},
+    .b3 = {0xE5, 0xF6, 0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45},
+    .b4 = {0x05, 0x46, 0x77, 0x77, 0x77, 0x77, 0x76, 0x45},
+    .gate_timing = {0x32, 0x03, 0x1F},
+    .b7 = {0x13},
+    .b0 = {0x60},
+    .c9 = {0x00},
+    .m36 = {0x48},
+    .m3a = {0x11},
+    .b9 = {0x20},
+    .b8 = {0x29},
+    .m35 = {0x00},
+    .d0 = {0xFF},
+    .bb = {0x4F},
+};
+
+static const rlcd_controller_profile_t rlcd_controller_profiles[] = {
+    {
+        .name = "hpm",
+        .power_mode_cmd = 0x38,
+    },
+    {
+        .name = "lpm",
+        .power_mode_cmd = 0x39,
+    },
+};
+
+static const rlcd_controller_settings_t *rlcd_panel_settings(
+    const rlcd_st7305_t *display)
+{
+    return display != NULL &&
+        display->config.panel == RLCD_ST7305_PANEL_168X384 ?
+        &rlcd_168x384_settings : &rlcd_waveshare_settings;
+}
+
+static const u8x8_display_info_t *rlcd_display_info(const rlcd_st7305_t *display)
+{
+    return display != NULL &&
+        display->config.panel == RLCD_ST7305_PANEL_168X384 ?
+        &st7305_168x384_display_info : &st7305_300x400_display_info;
+}
+
+static void rlcd_configure_geometry(rlcd_st7305_t *display)
+{
+    if (display->config.panel == RLCD_ST7305_PANEL_168X384) {
+        display->native_width = 168;
+        display->native_height = 384;
+        display->tile_width = 21;
+        display->tile_height = 48;
+        display->address_start = 0x17;
+    } else {
+        display->native_width = 300;
+        display->native_height = 400;
+        display->tile_width = 38;
+        display->tile_height = 50;
+        display->address_start = 0x12;
+    }
+
+    display->buffer_row_bytes = (uint16_t)display->tile_width * 8U;
+    display->controller_row_bytes =
+        (uint16_t)(((display->native_width + 11U) / 12U) * 3U);
+    const uint8_t address_end = (uint8_t)(
+        display->address_start + display->controller_row_bytes / 3U - 1U);
+    display->address_mirror_base = (uint8_t)(display->address_start + address_end);
+
+    if (display->config.rotation == U8G2_R1 ||
+        display->config.rotation == U8G2_R3) {
+        display->logical_width = display->native_height;
+        display->logical_height = display->native_width;
+    } else {
+        display->logical_width = display->native_width;
+        display->logical_height = display->native_height;
+    }
+}
+
+static size_t rlcd_expected_shadow_size(const rlcd_st7305_t *display)
+{
+    return display != NULL ?
+        (size_t)display->controller_row_bytes *
+            RLCD_CONTROLLER_ROWS_PER_TILE * display->tile_height :
+        0U;
+}
+
+typedef struct {
+    const char *label;
+    uint8_t setting;
+} rlcd_lpm_frame_rate_value_t;
+
+typedef struct {
+    const char *label;
+    uint16_t hz_tenths;
+    uint8_t setting;
+    uint8_t oscset_first;
+    bool hfra;
+} rlcd_hpm_frame_rate_value_t;
+
+static const rlcd_lpm_frame_rate_value_t rlcd_lpm_frame_rate_values[] = {
+    {.label = "0.25", .setting = 0},
+    {.label = "0.5", .setting = 1},
+    {.label = "1", .setting = 2},
+    {.label = "2", .setting = 3},
+    {.label = "4", .setting = 4},
+    {.label = "8", .setting = 5},
+};
+
+static const rlcd_hpm_frame_rate_value_t rlcd_hpm_frame_rate_values[] = {
+    {.label = "16", .hz_tenths = 160, .setting = 0, .oscset_first = 0xA6, .hfra = false},
+    {.label = "32", .hz_tenths = 320, .setting = 1, .oscset_first = 0xA6, .hfra = true},
+    {.label = "25.5", .hz_tenths = 255, .setting = 2, .oscset_first = 0x80, .hfra = false},
+    {.label = "51", .hz_tenths = 510, .setting = 3, .oscset_first = 0x80, .hfra = true},
+};
+
+static bool rlcd_checked_cmd(rlcd_st7305_t *display, uint8_t command);
+static esp_err_t rlcd_apply_controller_profile(rlcd_st7305_t *display,
+                                               const rlcd_controller_profile_t *profile,
+                                               bool display_was_reset);
+static esp_err_t rlcd_apply_frame_power_mode(rlcd_st7305_t *display, bool frame_changed);
+
+static bool rlcd_take_lock(rlcd_st7305_t *display, TickType_t wait_ticks)
+{
+    if (display == NULL || display->lock == NULL) {
+        return false;
+    }
+    return xSemaphoreTake(display->lock, wait_ticks) == pdTRUE;
+}
+
+static void rlcd_give_lock(rlcd_st7305_t *display)
+{
+    if (display != NULL && display->lock != NULL) {
+        xSemaphoreGive(display->lock);
+    }
+}
+
+static void rlcd_cancel_idle_lpm_timer(rlcd_st7305_t *display)
+{
+    if (display == NULL || display->idle_lpm_timer == NULL) {
+        return;
+    }
+    (void)esp_timer_stop(display->idle_lpm_timer);
+}
+
+static esp_err_t rlcd_schedule_idle_lpm_timer(rlcd_st7305_t *display)
+{
+    if (display == NULL || display->idle_lpm_timer == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (display->power_policy != RLCD_POWER_POLICY_AUTO) {
+        rlcd_cancel_idle_lpm_timer(display);
+        return ESP_OK;
+    }
+
+    if (display->idle_lpm_delay_ms == 0) {
+        return rlcd_apply_frame_power_mode(display, false);
+    }
+
+    rlcd_cancel_idle_lpm_timer(display);
+    return esp_timer_start_once(display->idle_lpm_timer,
+                                (uint64_t)display->idle_lpm_delay_ms * 1000ULL);
+}
+
+static bool rlcd_idle_lpm_delay_valid(uint32_t delay_ms)
+{
+    return delay_ms <= RLCD_IDLE_LPM_DELAY_MAX_MS;
+}
+
+static esp_err_t rlcd_load_idle_lpm_delay(uint32_t *delay_ms)
+{
+    if (delay_ms == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *delay_ms = RLCD_IDLE_LPM_DELAY_DEFAULT_MS;
+
+    nvs_handle_t nvs;
+    esp_err_t ret = nvs_open(RLCD_IDLE_LPM_NVS_NAMESPACE, NVS_READONLY, &nvs);
+    if (ret == ESP_ERR_NVS_NOT_FOUND) {
+        return ESP_OK;
+    }
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    uint32_t stored = RLCD_IDLE_LPM_DELAY_DEFAULT_MS;
+    ret = nvs_get_u32(nvs, RLCD_IDLE_LPM_NVS_KEY, &stored);
+    nvs_close(nvs);
+    if (ret == ESP_ERR_NVS_NOT_FOUND) {
+        return ESP_OK;
+    }
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (!rlcd_idle_lpm_delay_valid(stored)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    *delay_ms = stored;
+    return ESP_OK;
+}
+
+static esp_err_t rlcd_save_idle_lpm_delay(uint32_t delay_ms, bool use_default)
+{
+    (void)use_default;
+
+    nvs_handle_t nvs;
+    esp_err_t ret = nvs_open(RLCD_IDLE_LPM_NVS_NAMESPACE, NVS_READWRITE, &nvs);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = nvs_set_u32(nvs, RLCD_IDLE_LPM_NVS_KEY, delay_ms);
+    if (ret == ESP_OK) {
+        ret = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+    return ret;
+}
+
+static esp_err_t rlcd_parse_idle_lpm_delay_option(const char *mode,
+                                                  uint32_t *delay_ms,
+                                                  bool *use_default)
+{
+    if (mode == NULL || delay_ms == NULL || use_default == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strncmp(mode,
+                RLCD_IDLE_LPM_OPTION_PREFIX,
+                strlen(RLCD_IDLE_LPM_OPTION_PREFIX)) != 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    const char *value = mode + strlen(RLCD_IDLE_LPM_OPTION_PREFIX);
+    if (strcmp(value, "default") == 0) {
+        *delay_ms = RLCD_IDLE_LPM_DELAY_DEFAULT_MS;
+        *use_default = true;
+        return ESP_OK;
+    }
+    if (value[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    errno = 0;
+    char *end = NULL;
+    const unsigned long parsed = strtoul(value, &end, 10);
+    if (errno != 0 || end == value || *end != '\0' || parsed > UINT32_MAX) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *delay_ms = (uint32_t)parsed;
+    *use_default = false;
+    return rlcd_idle_lpm_delay_valid(*delay_ms) ? ESP_OK : ESP_ERR_INVALID_SIZE;
+}
+
+static esp_err_t rlcd_load_tuning_overrides(rlcd_st7305_t *display)
+{
+    if (display == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    nvs_handle_t nvs;
+    esp_err_t ret = nvs_open(RLCD_IDLE_LPM_NVS_NAMESPACE, NVS_READONLY, &nvs);
+    if (ret == ESP_ERR_NVS_NOT_FOUND) {
+        return ESP_OK;
+    }
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    uint8_t lpm_frame_rate = display->lpm_frame_rate;
+    uint8_t hpm_frame_rate = display->hpm_frame_rate;
+    uint8_t power_policy = display->power_policy;
+    uint8_t inverted = display->inverted ? 1 : 0;
+
+    ret = nvs_get_u8(nvs, RLCD_LPM_FRAME_RATE_NVS_KEY, &lpm_frame_rate);
+    if (ret == ESP_ERR_NVS_NOT_FOUND) {
+        ret = ESP_OK;
+    } else if (ret == ESP_OK) {
+        if (lpm_frame_rate > RLCD_LPM_FRAME_RATE_MAX) {
+            ret = ESP_ERR_INVALID_SIZE;
+        }
+    }
+
+    if (ret == ESP_OK) {
+        ret = nvs_get_u8(nvs, RLCD_HPM_FRAME_RATE_NVS_KEY, &hpm_frame_rate);
+        if (ret == ESP_ERR_NVS_NOT_FOUND) {
+            ret = ESP_OK;
+        } else if (ret == ESP_OK) {
+            if (hpm_frame_rate > RLCD_HPM_FRAME_RATE_MAX) {
+                ret = ESP_ERR_INVALID_SIZE;
+            }
+        }
+    }
+    if (ret == ESP_OK) {
+        ret = nvs_get_u8(nvs, RLCD_POWER_POLICY_NVS_KEY, &power_policy);
+        if (ret == ESP_ERR_NVS_NOT_FOUND) {
+            ret = ESP_OK;
+        } else if (ret == ESP_OK) {
+            if (power_policy > RLCD_POWER_POLICY_LPM) {
+                ret = ESP_ERR_INVALID_SIZE;
+            }
+        }
+    }
+    if (ret == ESP_OK) {
+        ret = nvs_get_u8(nvs, RLCD_INVERTED_NVS_KEY, &inverted);
+        if (ret == ESP_ERR_NVS_NOT_FOUND) {
+            ret = ESP_OK;
+        } else if (ret == ESP_OK) {
+            if (inverted > 1) {
+                ret = ESP_ERR_INVALID_SIZE;
+            }
+        }
+    }
+
+    nvs_close(nvs);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    display->lpm_frame_rate = lpm_frame_rate;
+    display->hpm_frame_rate = hpm_frame_rate;
+    display->power_policy = power_policy;
+    display->inverted = inverted != 0;
+    return ESP_OK;
+}
+
+static esp_err_t rlcd_save_u8_tuning(const char *key, uint8_t value)
+{
+    if (key == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    nvs_handle_t nvs;
+    esp_err_t ret = nvs_open(RLCD_IDLE_LPM_NVS_NAMESPACE, NVS_READWRITE, &nvs);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = nvs_set_u8(nvs, key, value);
+    if (ret == ESP_OK) {
+        ret = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+    return ret;
+}
+
+static bool rlcd_option_value(const char *mode, const char *prefix, const char **value)
+{
+    if (mode == NULL || prefix == NULL || value == NULL) {
+        return false;
+    }
+
+    const size_t prefix_length = strlen(prefix);
+    if (strncmp(mode, prefix, prefix_length) != 0) {
+        return false;
+    }
+
+    *value = mode + prefix_length;
+    return true;
+}
+
+static esp_err_t rlcd_parse_lpm_frame_rate_option(const char *mode,
+                                                  uint8_t *setting,
+                                                  bool *use_default)
+{
+    if (mode == NULL || setting == NULL || use_default == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *value = NULL;
+    if (!rlcd_option_value(mode, RLCD_LPM_HZ_OPTION_PREFIX, &value) &&
+        !rlcd_option_value(mode, RLCD_LPM_RATE_OPTION_PREFIX, &value)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (strcmp(value, "default") == 0) {
+        *setting = RLCD_LPM_FRAME_RATE_DEFAULT;
+        *use_default = true;
+        return ESP_OK;
+    }
+
+    const size_t count =
+        sizeof(rlcd_lpm_frame_rate_values) / sizeof(rlcd_lpm_frame_rate_values[0]);
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(value, rlcd_lpm_frame_rate_values[i].label) == 0) {
+            *setting = rlcd_lpm_frame_rate_values[i].setting;
+            *use_default = false;
+            return ESP_OK;
+        }
+    }
+
+    return ESP_ERR_INVALID_ARG;
+}
+
+static esp_err_t rlcd_parse_hpm_frame_rate_option(const char *mode,
+                                                  uint8_t *setting,
+                                                  bool *use_default)
+{
+    if (mode == NULL || setting == NULL || use_default == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *value = NULL;
+    if (!rlcd_option_value(mode, RLCD_HPM_HZ_OPTION_PREFIX, &value)) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (strcmp(value, "default") == 0) {
+        *setting = RLCD_HPM_FRAME_RATE_DEFAULT;
+        *use_default = true;
+        return ESP_OK;
+    }
+
+    const size_t count =
+        sizeof(rlcd_hpm_frame_rate_values) / sizeof(rlcd_hpm_frame_rate_values[0]);
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(value, rlcd_hpm_frame_rate_values[i].label) == 0) {
+            *setting = rlcd_hpm_frame_rate_values[i].setting;
+            *use_default = false;
+            return ESP_OK;
+        }
+    }
+
+    return ESP_ERR_INVALID_ARG;
+}
+
+static const char *rlcd_power_policy_label(uint8_t policy)
+{
+    switch ((rlcd_power_policy_t)policy) {
+    case RLCD_POWER_POLICY_AUTO:
+        return "auto";
+    case RLCD_POWER_POLICY_HPM:
+        return "hpm";
+    case RLCD_POWER_POLICY_LPM:
+        return "lpm";
+    default:
+        return "auto";
+    }
+}
+
+static esp_err_t rlcd_parse_power_policy_option(const char *mode, uint8_t *policy)
+{
+    if (mode == NULL || policy == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *value = NULL;
+    if (!rlcd_option_value(mode, RLCD_POWER_OPTION_PREFIX, &value)) {
+        if (strcmp(mode, "auto") == 0 || strcmp(mode, "hpm") == 0 || strcmp(mode, "lpm") == 0) {
+            value = mode;
+        } else {
+            return ESP_ERR_NOT_FOUND;
+        }
+    }
+
+    if (strcmp(value, "auto") == 0 || strcmp(value, "default") == 0) {
+        *policy = RLCD_POWER_POLICY_AUTO;
+        return ESP_OK;
+    }
+    if (strcmp(value, "hpm") == 0) {
+        *policy = RLCD_POWER_POLICY_HPM;
+        return ESP_OK;
+    }
+    if (strcmp(value, "lpm") == 0) {
+        *policy = RLCD_POWER_POLICY_LPM;
+        return ESP_OK;
+    }
+    return ESP_ERR_INVALID_ARG;
+}
+
+static esp_err_t rlcd_parse_inverted_option(const char *mode, bool *inverted)
+{
+    if (mode == NULL || inverted == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *value = NULL;
+    if (!rlcd_option_value(mode, RLCD_INVERTED_OPTION_PREFIX, &value)) {
+        if (strcmp(mode, "inverted") == 0) {
+            *inverted = true;
+            return ESP_OK;
+        }
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (strcmp(value, "on") == 0 || strcmp(value, "true") == 0 || strcmp(value, "1") == 0 ||
+        strcmp(value, "default") == 0) {
+        *inverted = true;
+        return ESP_OK;
+    }
+    if (strcmp(value, "off") == 0 || strcmp(value, "false") == 0 || strcmp(value, "0") == 0) {
+        *inverted = false;
+        return ESP_OK;
+    }
+    return ESP_ERR_INVALID_ARG;
+}
+
+static esp_err_t rlcd_write_bytes(rlcd_st7305_t *display, const uint8_t *data, size_t length)
+{
+    while (length > 0) {
+        const size_t chunk = length > RLCD_MAX_TRANSFER_BYTES ? RLCD_MAX_TRANSFER_BYTES : length;
+        spi_transaction_t transaction = {
+            .length = chunk * 8,
+            .tx_buffer = data,
+        };
+
+        ESP_RETURN_ON_ERROR(spi_device_polling_transmit(display->spi, &transaction), TAG,
+                            "spi transmit failed");
+        data += chunk;
+        length -= chunk;
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t rlcd_cmd_data(rlcd_st7305_t *display, uint8_t command, const uint8_t *data, size_t length)
+{
+    esp_err_t err = gpio_set_level(display->config.dc_pin, 0);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = gpio_set_level(display->config.cs_pin, 0);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = rlcd_write_bytes(display, &command, sizeof(command));
+    if (err == ESP_OK && length > 0) {
+        err = gpio_set_level(display->config.dc_pin, 1);
+        if (err == ESP_OK) {
+            err = rlcd_write_bytes(display, data, length);
+        }
+    }
+
+    const esp_err_t cs_err = gpio_set_level(display->config.cs_pin, 1);
+    return err == ESP_OK ? cs_err : err;
+}
+
+static esp_err_t rlcd_cmd(rlcd_st7305_t *display, uint8_t command)
+{
+    return rlcd_cmd_data(display, command, NULL, 0);
+}
+
+static esp_err_t rlcd_begin_ram_write(rlcd_st7305_t *display)
+{
+    const uint8_t command = 0x2C;
+    esp_err_t err = gpio_set_level(display->config.dc_pin, 0);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = gpio_set_level(display->config.cs_pin, 0);
+    if (err == ESP_OK) {
+        err = rlcd_write_bytes(display, &command, sizeof(command));
+    }
+    if (err == ESP_OK) {
+        err = gpio_set_level(display->config.dc_pin, 1);
+    }
+    if (err != ESP_OK) {
+        (void)gpio_set_level(display->config.cs_pin, 1);
+    }
+    return err;
+}
+
+static esp_err_t rlcd_end_ram_write(rlcd_st7305_t *display)
+{
+    return gpio_set_level(display->config.cs_pin, 1);
+}
+
+static void rlcd_invalidate_shadow(rlcd_st7305_t *display)
+{
+    if (display != NULL) {
+        display->shadow_valid_rows = 0;
+        display->direct_frame_valid = false;
+    }
+}
+
+static bool rlcd_shadow_row_valid(const rlcd_st7305_t *display, uint8_t y_pos)
+{
+    return display != NULL &&
+        display->shadow != NULL &&
+        display->shadow_size == rlcd_expected_shadow_size(display) &&
+        y_pos < display->tile_height &&
+        (display->shadow_valid_rows & (1ULL << y_pos)) != 0;
+}
+
+static uint8_t *rlcd_shadow_tile_row(rlcd_st7305_t *display, uint8_t y_pos)
+{
+    return display->shadow +
+        ((size_t)y_pos * RLCD_CONTROLLER_ROWS_PER_TILE * display->controller_row_bytes);
+}
+
+static bool rlcd_shadow_window_matches(rlcd_st7305_t *display,
+                                       const uint8_t *rows,
+                                       uint8_t y_pos,
+                                       int send_start,
+                                       int send_count)
+{
+    if (rows == NULL ||
+        send_start < 0 ||
+        send_count <= 0 ||
+        send_start + send_count > display->controller_row_bytes ||
+        !rlcd_shadow_row_valid(display, y_pos)) {
+        return false;
+    }
+
+    const uint8_t *shadow = rlcd_shadow_tile_row(display, y_pos);
+    for (int source_row = 0; source_row < RLCD_CONTROLLER_ROWS_PER_TILE; source_row++) {
+        const uint8_t *source = rows + ((size_t)source_row * (size_t)send_count);
+        const uint8_t *previous =
+            shadow + ((size_t)source_row * display->controller_row_bytes) + send_start;
+        if (memcmp(previous, source, (size_t)send_count) != 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void rlcd_shadow_update_window(rlcd_st7305_t *display,
+                                      const uint8_t *rows,
+                                      uint8_t y_pos,
+                                      int send_start,
+                                      int send_count)
+{
+    if (display == NULL ||
+        display->shadow == NULL ||
+        display->shadow_size != rlcd_expected_shadow_size(display) ||
+        rows == NULL ||
+        y_pos >= display->tile_height ||
+        send_start < 0 ||
+        send_count <= 0 ||
+        send_start + send_count > display->controller_row_bytes) {
+        return;
+    }
+
+    uint8_t *shadow = rlcd_shadow_tile_row(display, y_pos);
+    for (int source_row = 0; source_row < RLCD_CONTROLLER_ROWS_PER_TILE; source_row++) {
+        const uint8_t *source = rows + ((size_t)source_row * (size_t)send_count);
+        uint8_t *dest = shadow +
+            ((size_t)source_row * display->controller_row_bytes) + send_start;
+        memcpy(dest, source, (size_t)send_count);
+    }
+
+    if (send_start == 0 && send_count == display->controller_row_bytes) {
+        display->shadow_valid_rows |= (1ULL << y_pos);
+    }
+}
+
+static void rlcd_pack_tile_window(const uint8_t *row_base,
+                                  int addr_first_col,
+                                  int addr_last_col,
+                                  int send_start,
+                                  int send_count,
+                                  uint8_t *rows)
+{
+    static const uint8_t st_lut[4][4] = {
+        {0x00, 0x80, 0x40, 0xC0},
+        {0x00, 0x20, 0x10, 0x30},
+        {0x00, 0x08, 0x04, 0x0C},
+        {0x00, 0x02, 0x01, 0x03},
+    };
+
+    memset(rows, 0, (size_t)send_count * RLCD_CONTROLLER_ROWS_PER_TILE);
+    for (int source_row = 0; source_row < RLCD_CONTROLLER_ROWS_PER_TILE; source_row++) {
+        const int shift = source_row * 2;
+        const int base_offset = source_row * send_count;
+        int index = base_offset + (addr_first_col >> 2) - send_start;
+
+        for (int col = addr_first_col; col <= addr_last_col; col += 4, index++) {
+            rows[index] = st_lut[0][(row_base[col] >> shift) & 3] |
+                          st_lut[1][(row_base[col + 1] >> shift) & 3] |
+                          st_lut[2][(row_base[col + 2] >> shift) & 3] |
+                          st_lut[3][(row_base[col + 3] >> shift) & 3];
+        }
+    }
+}
+
+static bool rlcd_checked_cmd_data(rlcd_st7305_t *display, uint8_t command, const uint8_t *data, size_t length)
+{
+    const esp_err_t err = rlcd_cmd_data(display, command, data, length);
+    if (err != ESP_OK) {
+        display->last_error = err;
+        ESP_LOGE(TAG, "command 0x%02x failed: %s", command, esp_err_to_name(err));
+        return false;
+    }
+
+    return true;
+}
+
+static const rlcd_controller_profile_t *rlcd_find_controller_profile(const char *mode)
+{
+    if (mode == NULL || mode[0] == '\0') {
+        mode = "default";
+    }
+
+    for (size_t i = 0; i < sizeof(rlcd_controller_profiles) / sizeof(rlcd_controller_profiles[0]); i++) {
+        if (strcmp(rlcd_controller_profiles[i].name, mode) == 0) {
+            return &rlcd_controller_profiles[i];
+        }
+    }
+
+    return NULL;
+}
+
+static const rlcd_controller_profile_t *rlcd_current_controller_profile(const rlcd_st7305_t *display)
+{
+    const rlcd_controller_profile_t *profile =
+        rlcd_find_controller_profile(display != NULL ? display->controller_mode : NULL);
+    return profile != NULL ? profile : &rlcd_controller_profiles[0];
+}
+
+static uint8_t rlcd_effective_lpm_frame_rate(const rlcd_st7305_t *display,
+                                             const rlcd_controller_settings_t *settings)
+{
+    if (display != NULL) {
+        return display->lpm_frame_rate;
+    }
+    if (settings == NULL) {
+        return RLCD_LPM_FRAME_RATE_DEFAULT;
+    }
+    return settings->b2[0] & RLCD_FRCTRL_LFRA_MASK;
+}
+
+static const rlcd_hpm_frame_rate_value_t *rlcd_hpm_frame_rate_value(uint8_t setting)
+{
+    const size_t count =
+        sizeof(rlcd_hpm_frame_rate_values) / sizeof(rlcd_hpm_frame_rate_values[0]);
+    for (size_t i = 0; i < count; i++) {
+        if (rlcd_hpm_frame_rate_values[i].setting == setting) {
+            return &rlcd_hpm_frame_rate_values[i];
+        }
+    }
+    return NULL;
+}
+
+static const rlcd_hpm_frame_rate_value_t *rlcd_hpm_frame_rate_for_hz(
+    uint16_t hz_tenths)
+{
+    const size_t count =
+        sizeof(rlcd_hpm_frame_rate_values) / sizeof(rlcd_hpm_frame_rate_values[0]);
+    for (size_t i = 0; i < count; i++) {
+        if (rlcd_hpm_frame_rate_values[i].hz_tenths == hz_tenths) {
+            return &rlcd_hpm_frame_rate_values[i];
+        }
+    }
+    return NULL;
+}
+
+static void rlcd_effective_d8(const rlcd_st7305_t *display,
+                              const rlcd_controller_settings_t *settings,
+                              uint8_t d8[2])
+{
+    if (settings == NULL || d8 == NULL) {
+        return;
+    }
+
+    d8[0] = settings->d8[0];
+    d8[1] = settings->d8[1];
+    if (display == NULL) {
+        return;
+    }
+
+    const rlcd_hpm_frame_rate_value_t *value =
+        rlcd_hpm_frame_rate_value(display->hpm_frame_rate);
+    if (value != NULL) {
+        d8[0] = value->oscset_first;
+    }
+}
+
+static uint8_t rlcd_effective_b2(const rlcd_st7305_t *display,
+                                 const rlcd_controller_settings_t *settings)
+{
+    if (settings == NULL) {
+        return 0;
+    }
+
+    uint8_t b2 = settings->b2[0];
+    if (display != NULL) {
+        const rlcd_hpm_frame_rate_value_t *hpm_value =
+            rlcd_hpm_frame_rate_value(display->hpm_frame_rate);
+        if (hpm_value != NULL) {
+            if (hpm_value->hfra) {
+                b2 |= RLCD_FRCTRL_HFRA_BIT;
+            } else {
+                b2 &= (uint8_t)~RLCD_FRCTRL_HFRA_BIT;
+            }
+        }
+    }
+
+    const uint8_t lpm_frame_rate = rlcd_effective_lpm_frame_rate(display, settings);
+    return (uint8_t)((b2 & (uint8_t)~RLCD_FRCTRL_LFRA_MASK) |
+                     (lpm_frame_rate & RLCD_FRCTRL_LFRA_MASK));
+}
+
+static esp_err_t rlcd_apply_controller_power_mode(rlcd_st7305_t *display,
+                                                  const rlcd_controller_profile_t *profile)
+{
+    if (display == NULL || profile == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!rlcd_checked_cmd(display, profile->power_mode_cmd)) {
+        return display->last_error;
+    }
+
+    display->controller_mode = profile->name;
+    display->last_error = ESP_OK;
+    return ESP_OK;
+}
+
+static const rlcd_controller_profile_t *rlcd_frame_power_profile(
+    const rlcd_st7305_t *display,
+    const rlcd_controller_profile_t *current,
+    bool frame_changed)
+{
+    if (current == NULL) {
+        return NULL;
+    }
+
+    uint8_t target_power_cmd = frame_changed ? 0x38 : 0x39;
+    if (display != NULL) {
+        switch ((rlcd_power_policy_t)display->power_policy) {
+        case RLCD_POWER_POLICY_HPM:
+            target_power_cmd = 0x38;
+            break;
+        case RLCD_POWER_POLICY_LPM:
+            target_power_cmd = 0x39;
+            break;
+        case RLCD_POWER_POLICY_AUTO:
+        default:
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < sizeof(rlcd_controller_profiles) / sizeof(rlcd_controller_profiles[0]); i++) {
+        const rlcd_controller_profile_t *candidate = &rlcd_controller_profiles[i];
+        if (candidate->power_mode_cmd == target_power_cmd) {
+            return candidate;
+        }
+    }
+    return current;
+}
+
+static esp_err_t rlcd_apply_frame_power_mode(rlcd_st7305_t *display, bool frame_changed)
+{
+    if (display == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const rlcd_controller_profile_t *current = rlcd_current_controller_profile(display);
+    const rlcd_controller_profile_t *profile = rlcd_frame_power_profile(display, current, frame_changed);
+    if (profile == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (current == profile) {
+        display->controller_mode = profile->name;
+        return ESP_OK;
+    }
+
+    return rlcd_apply_controller_power_mode(display, profile);
+}
+
+static void rlcd_idle_lpm_timer_cb(void *arg)
+{
+    rlcd_st7305_t *display = (rlcd_st7305_t *)arg;
+    if (!rlcd_take_lock(display, 0)) {
+        return;
+    }
+
+    if (display->spi != NULL &&
+        display->power_policy == RLCD_POWER_POLICY_AUTO &&
+        !display->frame_content_changed) {
+        (void)rlcd_apply_frame_power_mode(display, false);
+    }
+
+    rlcd_give_lock(display);
+}
+
+static esp_err_t rlcd_apply_controller_profile(rlcd_st7305_t *display,
+                                               const rlcd_controller_profile_t *profile,
+                                               bool display_was_reset)
+{
+    if (display == NULL || profile == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const rlcd_controller_settings_t *settings = rlcd_panel_settings(display);
+    const uint8_t win_a[] = {
+        display->address_start,
+        (uint8_t)(display->address_mirror_base - display->address_start),
+    };
+    const uint8_t win_b[] = {
+        0x00,
+        (uint8_t)(display->native_height / 2U - 1U),
+    };
+    uint8_t d8[sizeof(settings->d8)];
+    rlcd_effective_d8(display, settings, d8);
+    const uint8_t b2[] = {rlcd_effective_b2(display, settings)};
+    const uint8_t inversion_cmd = display->inverted ? 0x21 : 0x20;
+
+    if (display_was_reset &&
+        display->config.panel == RLCD_ST7305_PANEL_168X384) {
+        if (!rlcd_checked_cmd(display, 0x01)) {
+            return display->last_error;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    if (!rlcd_checked_cmd_data(display, 0xD6, settings->d6, sizeof(settings->d6)) ||
+        !rlcd_checked_cmd_data(display, 0xD1, settings->d1, sizeof(settings->d1)) ||
+        !rlcd_checked_cmd_data(display, 0xC0, settings->c0, sizeof(settings->c0)) ||
+        !rlcd_checked_cmd_data(display, 0xC1, settings->c1, sizeof(settings->c1)) ||
+        !rlcd_checked_cmd_data(display, 0xC2, settings->c2, sizeof(settings->c2)) ||
+        !rlcd_checked_cmd_data(display, 0xC4, settings->c4, sizeof(settings->c4)) ||
+        !rlcd_checked_cmd_data(display, 0xC5, settings->c5, sizeof(settings->c5)) ||
+        !rlcd_checked_cmd_data(display, 0xD8, d8, sizeof(d8)) ||
+        !rlcd_checked_cmd_data(display, 0xB2, b2, sizeof(b2)) ||
+        !rlcd_checked_cmd_data(display, 0xB3, settings->b3, sizeof(settings->b3)) ||
+        !rlcd_checked_cmd_data(display, 0xB4, settings->b4, sizeof(settings->b4)) ||
+        !rlcd_checked_cmd_data(display, 0x62, settings->gate_timing, sizeof(settings->gate_timing)) ||
+        !rlcd_checked_cmd_data(display, 0xB7, settings->b7, sizeof(settings->b7)) ||
+        !rlcd_checked_cmd_data(display, 0xB0, settings->b0, sizeof(settings->b0)) ||
+        !rlcd_checked_cmd(display, 0x11)) {
+        return display->last_error;
+    }
+
+    if (display_was_reset) {
+        vTaskDelay(pdMS_TO_TICKS(120));
+    } else {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    if (!rlcd_checked_cmd_data(display, 0xC9, settings->c9, sizeof(settings->c9)) ||
+        !rlcd_checked_cmd_data(display, 0x36, settings->m36, sizeof(settings->m36)) ||
+        !rlcd_checked_cmd_data(display, 0x3A, settings->m3a, sizeof(settings->m3a)) ||
+        !rlcd_checked_cmd_data(display, 0xB9, settings->b9, sizeof(settings->b9)) ||
+        !rlcd_checked_cmd_data(display, 0xB8, settings->b8, sizeof(settings->b8))) {
+        return display->last_error;
+    }
+
+    if (!rlcd_checked_cmd(display, inversion_cmd)) {
+        return display->last_error;
+    }
+
+    if (!rlcd_checked_cmd_data(display, 0x2A, win_a, sizeof(win_a)) ||
+        !rlcd_checked_cmd_data(display, 0x2B, win_b, sizeof(win_b)) ||
+        !rlcd_checked_cmd_data(display, 0x35, settings->m35, sizeof(settings->m35)) ||
+        !rlcd_checked_cmd_data(display, 0xD0, settings->d0, sizeof(settings->d0)) ||
+        !rlcd_checked_cmd(display, profile->power_mode_cmd) ||
+        !rlcd_checked_cmd(display, 0x29)) {
+        return display->last_error;
+    }
+    if (display->config.panel == RLCD_ST7305_PANEL_168X384 &&
+        (!rlcd_checked_cmd(display, inversion_cmd) ||
+         !rlcd_checked_cmd_data(display, 0xBB, settings->bb, sizeof(settings->bb)))) {
+        return display->last_error;
+    }
+
+    rlcd_invalidate_shadow(display);
+    display->controller_mode = profile->name;
+    display->last_error = ESP_OK;
+    return ESP_OK;
+}
+
+static esp_err_t rlcd_apply_controller_tuning(rlcd_st7305_t *display,
+                                              bool send_d8,
+                                              bool send_b2)
+{
+    if (display == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const rlcd_controller_profile_t *profile = rlcd_current_controller_profile(display);
+    if (profile == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const rlcd_controller_settings_t *settings = rlcd_panel_settings(display);
+    uint8_t d8[sizeof(settings->d8)];
+    rlcd_effective_d8(display, settings, d8);
+    const uint8_t b2[] = {rlcd_effective_b2(display, settings)};
+
+    if (send_d8 && !rlcd_checked_cmd_data(display, 0xD8, d8, sizeof(d8))) {
+        return display->last_error;
+    }
+    if (send_b2 && !rlcd_checked_cmd_data(display, 0xB2, b2, sizeof(b2))) {
+        return display->last_error;
+    }
+
+    display->last_error = ESP_OK;
+    return ESP_OK;
+}
+
+static esp_err_t rlcd_apply_inversion(rlcd_st7305_t *display)
+{
+    if (display == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!rlcd_checked_cmd(display, display->inverted ? 0x21 : 0x20)) {
+        return display->last_error;
+    }
+    display->last_error = ESP_OK;
+    return ESP_OK;
+}
+
+static bool rlcd_checked_cmd(rlcd_st7305_t *display, uint8_t command)
+{
+    const esp_err_t err = rlcd_cmd(display, command);
+    if (err != ESP_OK) {
+        display->last_error = err;
+        ESP_LOGE(TAG, "command 0x%02x failed: %s", command, esp_err_to_name(err));
+        return false;
+    }
+
+    return true;
+}
+
+static void rlcd_reset(rlcd_st7305_t *display)
+{
+    gpio_set_level(display->config.reset_pin, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    gpio_set_level(display->config.reset_pin, 0);
+    vTaskDelay(pdMS_TO_TICKS(20));
+    gpio_set_level(display->config.reset_pin, 1);
+    vTaskDelay(pdMS_TO_TICKS(50));
+}
+
+static esp_err_t rlcd_configure_control_pins(rlcd_st7305_t *display)
+{
+    const gpio_config_t io_config = {
+        .pin_bit_mask = (1ULL << display->config.dc_pin) |
+                        (1ULL << display->config.cs_pin) |
+                        (1ULL << display->config.reset_pin),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_RETURN_ON_ERROR(gpio_config(&io_config), TAG, "gpio config failed");
+    ESP_RETURN_ON_ERROR(gpio_set_level(display->config.cs_pin, 1), TAG, "cs high failed");
+    ESP_RETURN_ON_ERROR(gpio_set_level(display->config.dc_pin, 1), TAG, "dc high failed");
+    ESP_RETURN_ON_ERROR(gpio_set_level(display->config.reset_pin, 1), TAG, "rst high failed");
+    return ESP_OK;
+}
+
+static esp_err_t rlcd_full_init(rlcd_st7305_t *display)
+{
+    rlcd_reset(display);
+
+    const rlcd_controller_profile_t *current = rlcd_current_controller_profile(display);
+    const rlcd_controller_profile_t *profile = rlcd_frame_power_profile(display, current, true);
+    return rlcd_apply_controller_profile(display, profile != NULL ? profile : current, true);
+}
+
+static uint8_t rlcd_u8x8_byte_cb(u8x8_t *u8x8, uint8_t message, uint8_t arg_int, void *arg_ptr)
+{
+    (void)u8x8;
+    (void)message;
+    (void)arg_int;
+    (void)arg_ptr;
+    return 1;
+}
+
+static uint8_t rlcd_u8x8_display_cb_locked(rlcd_st7305_t *display,
+                                           u8x8_t *u8x8,
+                                           uint8_t message,
+                                           uint8_t arg_int,
+                                           void *arg_ptr)
+{
+    (void)u8x8;
+
+    switch (message) {
+    case U8X8_MSG_DISPLAY_INIT:
+        return rlcd_full_init(display) == ESP_OK ? 1 : 0;
+
+    case U8X8_MSG_DISPLAY_SET_POWER_SAVE:
+        rlcd_cancel_idle_lpm_timer(display);
+        rlcd_invalidate_shadow(display);
+        display->frame_content_changed = false;
+        return rlcd_checked_cmd(display, arg_int == 0 ? 0x29 : 0x28) ? 1 : 0;
+
+    case U8X8_MSG_DISPLAY_REFRESH:
+        if (display->frame_content_changed) {
+            display->frame_content_changed = false;
+            if (display->power_policy != RLCD_POWER_POLICY_AUTO) {
+                rlcd_cancel_idle_lpm_timer(display);
+                return 1;
+            }
+            return rlcd_schedule_idle_lpm_timer(display) == ESP_OK ? 1 : 0;
+        }
+        rlcd_cancel_idle_lpm_timer(display);
+        if (display->power_policy != RLCD_POWER_POLICY_AUTO) {
+            return 1;
+        }
+        return rlcd_apply_frame_power_mode(display, false) == ESP_OK ? 1 : 0;
+
+    case U8X8_MSG_DISPLAY_DRAW_TILE: {
+        const u8x8_tile_t *tile = (const u8x8_tile_t *)arg_ptr;
+        display->direct_frame_valid = false;
+        const uint8_t count = tile->cnt;
+        const uint8_t y_pos = tile->y_pos;
+        const uint8_t x_pos = tile->x_pos;
+
+        const int first_col = x_pos * 8;
+        int last_col = (x_pos + count) * 8 - 1;
+        if (last_col >= display->native_width) {
+            last_col = display->native_width - 1;
+        }
+
+        const int addr_start = display->address_start + first_col / 12;
+        const int addr_end = display->address_start + last_col / 12;
+        const int send_start = (addr_start - display->address_start) * 3;
+        const int send_count = (addr_end - addr_start + 1) * 3;
+
+        const int addr_first_col = (addr_start - display->address_start) * 12;
+        int addr_last_col = (addr_end - display->address_start) * 12 + 11;
+        if (addr_last_col >= display->native_width) {
+            addr_last_col = display->native_width - 1;
+        }
+
+        const uint8_t *row_base = tile->tile_ptr - ((uint16_t)x_pos * 8U);
+
+        uint8_t rows[display->controller_row_bytes * RLCD_CONTROLLER_ROWS_PER_TILE];
+        rlcd_pack_tile_window(row_base,
+                              addr_first_col,
+                              addr_last_col,
+                              send_start,
+                              send_count,
+                              rows);
+
+        if (rlcd_shadow_window_matches(display, rows, y_pos, send_start, send_count)) {
+            return 1;
+        }
+
+        rlcd_cancel_idle_lpm_timer(display);
+        display->frame_content_changed = true;
+        if (display->power_policy == RLCD_POWER_POLICY_AUTO &&
+            rlcd_apply_frame_power_mode(display, true) != ESP_OK) {
+            return 0;
+        }
+
+        const uint8_t col_bounds[] = {
+            (uint8_t)(display->address_mirror_base - addr_end),
+            (uint8_t)(display->address_mirror_base - addr_start),
+        };
+        if (!rlcd_checked_cmd_data(display, 0x2A, col_bounds, sizeof(col_bounds))) {
+            return 0;
+        }
+
+        const uint8_t row_bounds[] = {
+            (uint8_t)(y_pos * RLCD_CONTROLLER_ROWS_PER_TILE),
+            (uint8_t)(y_pos * RLCD_CONTROLLER_ROWS_PER_TILE + RLCD_CONTROLLER_ROWS_PER_TILE - 1),
+        };
+        if (!rlcd_checked_cmd_data(display, 0x2B, row_bounds, sizeof(row_bounds))) {
+            return 0;
+        }
+
+        if (!rlcd_checked_cmd_data(display,
+                                   0x2C,
+                                   rows,
+                                   (size_t)send_count * RLCD_CONTROLLER_ROWS_PER_TILE)) {
+            return 0;
+        }
+
+        rlcd_shadow_update_window(display, rows, y_pos, send_start, send_count);
+        return 1;
+    }
+
+    default:
+        return 0;
+    }
+}
+
+static uint8_t rlcd_u8x8_display_cb(u8x8_t *u8x8, uint8_t message, uint8_t arg_int, void *arg_ptr)
+{
+    if (message == U8X8_MSG_DISPLAY_SETUP_MEMORY) {
+        u8x8_d_helper_display_setup_memory(u8x8, rlcd_display_info(active_display));
+        return 1;
+    }
+
+    rlcd_st7305_t *display = active_display;
+    if (display == NULL || !rlcd_take_lock(display, portMAX_DELAY)) {
+        return 0;
+    }
+
+    const uint8_t result =
+        rlcd_u8x8_display_cb_locked(display, u8x8, message, arg_int, arg_ptr);
+    rlcd_give_lock(display);
+    return result;
+}
+
+esp_err_t rlcd_st7305_present_mono_xbm(rlcd_st7305_t *display,
+                                       const uint8_t *bitmap,
+                                       size_t bitmap_size,
+                                       uint16_t x,
+                                       uint16_t y,
+                                       uint16_t width,
+                                       uint16_t height,
+                                       uint16_t stride,
+                                       bool palette_inverted)
+{
+    if (display == NULL ||
+        display->spi == NULL ||
+        display->buffer == NULL ||
+        bitmap == NULL ||
+        width == 0 ||
+        height == 0 ||
+        stride < (size_t)((width + 7U) / 8U) ||
+        height > SIZE_MAX / stride ||
+        bitmap_size < (size_t)height * stride) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if ((x & 7U) != 0 ||
+        (uint32_t)x + width > display->logical_width ||
+        (uint32_t)y + height > display->logical_height ||
+        (display->u8g2.cb != U8G2_R1 && display->u8g2.cb != U8G2_R3)) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (!rlcd_take_lock(display, portMAX_DELAY)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    memset(display->buffer, palette_inverted ? 0x00 : 0xFF, display->buffer_size);
+    if (display->u8g2.cb == U8G2_R1) {
+        const size_t source_bytes = width / 8U;
+        const uint8_t source_tail_bits = (uint8_t)(width & 7U);
+        const size_t destination_byte = x / 8U;
+        for (size_t source_y = 0; source_y < height; source_y++) {
+            const size_t native_x =
+                display->native_width - 1U - ((size_t)y + source_y);
+            const uint8_t *source = bitmap + source_y * stride;
+            uint8_t *destination = display->buffer +
+                destination_byte * display->buffer_row_bytes + native_x;
+            for (size_t source_byte = 0; source_byte < source_bytes; source_byte++) {
+                destination[source_byte * display->buffer_row_bytes] =
+                    palette_inverted ? source[source_byte] : (uint8_t)~source[source_byte];
+            }
+            if (source_tail_bits != 0U) {
+                const uint8_t mask = (uint8_t)((1U << source_tail_bits) - 1U);
+                uint8_t *tail =
+                    destination + source_bytes * display->buffer_row_bytes;
+                const uint8_t pixels = palette_inverted ?
+                    source[source_bytes] : (uint8_t)~source[source_bytes];
+                *tail = (uint8_t)((*tail & (uint8_t)~mask) | (pixels & mask));
+            }
+        }
+    } else {
+        for (size_t source_y = 0; source_y < height; source_y++) {
+            const uint8_t *source = bitmap + source_y * stride;
+            const size_t native_x = (size_t)y + source_y;
+            for (size_t source_x = 0; source_x < width; source_x++) {
+                const size_t native_y =
+                    display->native_height - 1U - ((size_t)x + source_x);
+                uint8_t *destination = display->buffer +
+                    (native_y / 8U) * display->buffer_row_bytes + native_x;
+                const uint8_t mask = (uint8_t)(1U << (native_y & 7U));
+                const bool source_set =
+                    (source[source_x / 8U] & (1U << (source_x & 7U))) != 0;
+                const bool destination_set = palette_inverted ? source_set : !source_set;
+                if (destination_set) {
+                    *destination |= mask;
+                } else {
+                    *destination &= (uint8_t)~mask;
+                }
+            }
+        }
+    }
+
+    rlcd_cancel_idle_lpm_timer(display);
+    display->frame_content_changed = true;
+    esp_err_t ret = ESP_OK;
+    if (display->power_policy == RLCD_POWER_POLICY_AUTO) {
+        ret = rlcd_apply_frame_power_mode(display, true);
+    }
+
+    const bool partial = display->direct_frame_valid &&
+        display->direct_x == x && display->direct_y == y &&
+        display->direct_width == width && display->direct_height == height &&
+        display->direct_palette_inverted == palette_inverted;
+    uint8_t first_tile = 0U;
+    uint8_t last_tile = display->tile_height - 1U;
+    int first_col = 0;
+    int last_col = display->native_width - 1;
+    if (partial && display->u8g2.cb == U8G2_R1) {
+        first_tile = (uint8_t)(x / 8U);
+        last_tile = (uint8_t)((x + width - 1U) / 8U);
+        first_col = (int)(display->native_width - ((uint32_t)y + height));
+        last_col = (int)(display->native_width - 1U - y);
+    } else if (partial) {
+        first_tile = (uint8_t)((display->native_height - (x + width)) / 8U);
+        last_tile = (uint8_t)((display->native_height - 1U - x) / 8U);
+        first_col = y;
+        last_col = (int)(y + height - 1U);
+    }
+    const int addr_start = display->address_start + first_col / 12;
+    const int addr_end = display->address_start + last_col / 12;
+    const int send_start = (addr_start - display->address_start) * 3;
+    const int send_count = (addr_end - addr_start + 1) * 3;
+    const int addr_first_col = (addr_start - display->address_start) * 12;
+    int addr_last_col = (addr_end - display->address_start) * 12 + 11;
+    if (addr_last_col >= display->native_width) {
+        addr_last_col = display->native_width - 1;
+    }
+    const uint8_t col_bounds[] = {
+        (uint8_t)(display->address_mirror_base - addr_end),
+        (uint8_t)(display->address_mirror_base - addr_start),
+    };
+    const uint8_t row_bounds[] = {
+        (uint8_t)(first_tile * RLCD_CONTROLLER_ROWS_PER_TILE),
+        (uint8_t)((last_tile + 1U) * RLCD_CONTROLLER_ROWS_PER_TILE - 1U),
+    };
+    if (ret == ESP_OK &&
+        !rlcd_checked_cmd_data(display, 0x2A, col_bounds, sizeof(col_bounds))) {
+        ret = display->last_error;
+    }
+    if (ret == ESP_OK &&
+        !rlcd_checked_cmd_data(display, 0x2B, row_bounds, sizeof(row_bounds))) {
+        ret = display->last_error;
+    }
+    if (ret == ESP_OK) {
+        ret = rlcd_begin_ram_write(display);
+    }
+
+    uint8_t rows[display->controller_row_bytes * RLCD_CONTROLLER_ROWS_PER_TILE];
+    for (uint8_t y_pos = first_tile;
+         ret == ESP_OK && y_pos <= last_tile;
+         y_pos++) {
+        const uint8_t *row_base =
+            display->buffer + (size_t)y_pos * display->buffer_row_bytes;
+        rlcd_pack_tile_window(row_base,
+                              addr_first_col,
+                              addr_last_col,
+                              send_start,
+                              send_count,
+                              rows);
+        ret = rlcd_write_bytes(
+            display, rows,
+            (size_t)send_count * RLCD_CONTROLLER_ROWS_PER_TILE);
+        if (ret == ESP_OK) {
+            rlcd_shadow_update_window(display,
+                                      rows,
+                                      y_pos,
+                                      send_start,
+                                      send_count);
+        }
+    }
+
+    if (ret == ESP_OK) {
+        ret = rlcd_end_ram_write(display);
+        if (ret != ESP_OK) {
+            rlcd_invalidate_shadow(display);
+        }
+    } else {
+        (void)rlcd_end_ram_write(display);
+        rlcd_invalidate_shadow(display);
+    }
+
+    if (ret == ESP_OK) {
+        display->direct_x = x;
+        display->direct_y = y;
+        display->direct_width = width;
+        display->direct_height = height;
+        display->direct_palette_inverted = palette_inverted;
+        display->direct_frame_valid = true;
+        display->frame_content_changed = false;
+        if (display->power_policy == RLCD_POWER_POLICY_AUTO) {
+            ret = rlcd_schedule_idle_lpm_timer(display);
+        }
+    }
+    display->last_error = ret;
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "mono XBM present failed: %s", esp_err_to_name(ret));
+    }
+    rlcd_give_lock(display);
+    return ret;
+}
+
+esp_err_t rlcd_st7305_init(rlcd_st7305_t *display,
+                           const rlcd_st7305_config_t *config)
+{
+    if (display == NULL || config == NULL || config->spi_bus == NULL ||
+        config->spi_bus[0] == '\0' || config->cs_pin < 0 ||
+        config->dc_pin < 0 || config->reset_pin < 0 ||
+        (config->panel != RLCD_ST7305_PANEL_300X400 &&
+         config->panel != RLCD_ST7305_PANEL_168X384)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(display, 0, sizeof(*display));
+    display->config = *config;
+    if (display->config.spi_clock_hz == 0) {
+        display->config.spi_clock_hz = RLCD_SPI_CLOCK_HZ;
+    }
+    if (display->config.rotation == NULL) {
+        display->config.rotation =
+            display->config.panel == RLCD_ST7305_PANEL_168X384 ? U8G2_R3 : U8G2_R1;
+    }
+    rlcd_configure_geometry(display);
+    display->last_error = ESP_OK;
+    display->controller_mode = "hpm";
+    display->idle_lpm_delay_ms = RLCD_IDLE_LPM_DELAY_DEFAULT_MS;
+    display->lpm_frame_rate = RLCD_LPM_FRAME_RATE_DEFAULT;
+    display->hpm_frame_rate = RLCD_HPM_FRAME_RATE_DEFAULT;
+    display->power_policy = RLCD_POWER_POLICY_HPM;
+    display->inverted = true;
+
+    const esp_err_t config_err = rlcd_load_idle_lpm_delay(&display->idle_lpm_delay_ms);
+    if (config_err != ESP_OK) {
+        display->idle_lpm_delay_ms = RLCD_IDLE_LPM_DELAY_DEFAULT_MS;
+        ESP_LOGW(TAG,
+                 "idle LPM delay config ignored: %s",
+                 esp_err_to_name(config_err));
+    }
+    const esp_err_t tuning_err = rlcd_load_tuning_overrides(display);
+    if (tuning_err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "ST7305 tuning config ignored: %s",
+                 esp_err_to_name(tuning_err));
+    }
+
+    ESP_RETURN_ON_ERROR(rlcd_configure_control_pins(display), TAG, "control pin config failed");
+
+    const spi_device_interface_config_t device_config = {
+        .clock_speed_hz = (int)display->config.spi_clock_hz,
+        .mode = 0,
+        .spics_io_num = -1,
+        .queue_size = 1,
+    };
+    ESP_RETURN_ON_ERROR(solar_os_bus_spi_add_device(display->config.spi_bus,
+                                                    &device_config,
+                                                    &display->spi), TAG,
+                        "spi add device failed");
+
+    display->buffer_size =
+        (size_t)display->buffer_row_bytes * display->tile_height;
+    /* Driver staging buffer only requires byte-addressable memory. */
+    display->buffer = heap_caps_malloc(display->buffer_size, MALLOC_CAP_8BIT);
+    if (display->buffer == NULL) {
+        rlcd_st7305_deinit(display);
+        return ESP_ERR_NO_MEM;
+    }
+    memset(display->buffer, 0, display->buffer_size);
+
+    display->shadow_size = rlcd_expected_shadow_size(display);
+    /* Full-frame shadow prefers PSRAM but remains optional without it. */
+    display->shadow = heap_caps_malloc(display->shadow_size,
+                                       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (display->shadow == NULL) {
+        display->shadow = heap_caps_malloc(display->shadow_size, MALLOC_CAP_8BIT);
+    }
+    if (display->shadow == NULL) {
+        ESP_LOGW(TAG, "display shadow allocation failed, partial update skipping disabled");
+        display->shadow_size = 0;
+    } else {
+        memset(display->shadow, 0, display->shadow_size);
+        rlcd_invalidate_shadow(display);
+    }
+
+    display->lock = xSemaphoreCreateMutex();
+    if (display->lock == NULL) {
+        rlcd_st7305_deinit(display);
+        return ESP_ERR_NO_MEM;
+    }
+
+    const esp_timer_create_args_t idle_lpm_timer_args = {
+        .callback = rlcd_idle_lpm_timer_cb,
+        .arg = display,
+        .name = "rlcd_idle_lpm",
+    };
+    esp_err_t err = esp_timer_create(&idle_lpm_timer_args, &display->idle_lpm_timer);
+    if (err != ESP_OK) {
+        rlcd_st7305_deinit(display);
+        return err;
+    }
+
+    active_display = display;
+    u8g2_SetupDisplay(&display->u8g2, rlcd_u8x8_display_cb, u8x8_dummy_cb,
+                      rlcd_u8x8_byte_cb, u8x8_dummy_cb);
+    u8g2_SetupBuffer(&display->u8g2, display->buffer, display->tile_height,
+                     u8g2_ll_hvline_vertical_top_lsb, display->config.rotation);
+    u8g2_InitDisplay(&display->u8g2);
+    u8g2_SetPowerSave(&display->u8g2, 0);
+
+    return display->last_error;
+}
+
+esp_err_t rlcd_st7305_resume(rlcd_st7305_t *display)
+{
+    if (display == NULL || display->spi == NULL || display->buffer == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    rlcd_cancel_idle_lpm_timer(display);
+    display->frame_content_changed = false;
+    ESP_RETURN_ON_ERROR(rlcd_configure_control_pins(display), TAG, "resume pin config failed");
+    active_display = display;
+    display->last_error = ESP_OK;
+    rlcd_invalidate_shadow(display);
+    u8g2_InitDisplay(&display->u8g2);
+    u8g2_SetPowerSave(&display->u8g2, 0);
+    return display->last_error;
+}
+
+void rlcd_st7305_deinit(rlcd_st7305_t *display)
+{
+    if (display == NULL) {
+        return;
+    }
+
+    if (display->idle_lpm_timer != NULL) {
+        rlcd_cancel_idle_lpm_timer(display);
+        (void)esp_timer_delete(display->idle_lpm_timer);
+        display->idle_lpm_timer = NULL;
+    }
+
+    const bool locked = rlcd_take_lock(display, portMAX_DELAY);
+
+    if (display->spi != NULL) {
+        spi_bus_remove_device(display->spi);
+        display->spi = NULL;
+    }
+
+    if (display->buffer != NULL) {
+        heap_caps_free(display->buffer);
+        display->buffer = NULL;
+    }
+    if (display->shadow != NULL) {
+        heap_caps_free(display->shadow);
+        display->shadow = NULL;
+    }
+
+    if (active_display == display) {
+        active_display = NULL;
+    }
+
+    display->buffer_size = 0;
+    display->shadow_size = 0;
+    display->shadow_valid_rows = 0;
+
+    if (locked) {
+        rlcd_give_lock(display);
+    }
+    if (display->lock != NULL) {
+        vSemaphoreDelete(display->lock);
+        display->lock = NULL;
+    }
+}
+
+u8g2_t *rlcd_st7305_get_u8g2(rlcd_st7305_t *display)
+{
+    return display == NULL ? NULL : &display->u8g2;
+}
+
+uint16_t rlcd_st7305_width(const rlcd_st7305_t *display)
+{
+    return display != NULL ? display->logical_width : 0U;
+}
+
+uint16_t rlcd_st7305_height(const rlcd_st7305_t *display)
+{
+    return display != NULL ? display->logical_height : 0U;
+}
+
+const char *rlcd_st7305_controller_mode(const rlcd_st7305_t *display)
+{
+    return rlcd_power_policy_label(display != NULL ? display->power_policy : RLCD_POWER_POLICY_AUTO);
+}
+
+const char *rlcd_st7305_controller_mode_values(const rlcd_st7305_t *display)
+{
+    (void)display;
+    return RLCD_CONTROLLER_MODE_BASE_VALUES;
+}
+
+esp_err_t rlcd_st7305_set_controller_mode(rlcd_st7305_t *display, const char *mode)
+{
+    if (display == NULL || display->spi == NULL || mode == NULL || mode[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!rlcd_take_lock(display, portMAX_DELAY)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint32_t idle_lpm_delay_ms = RLCD_IDLE_LPM_DELAY_DEFAULT_MS;
+    bool use_default_idle_lpm_delay = false;
+    esp_err_t option_ret =
+        rlcd_parse_idle_lpm_delay_option(mode, &idle_lpm_delay_ms, &use_default_idle_lpm_delay);
+    if (option_ret == ESP_OK) {
+        const esp_err_t save_ret =
+            rlcd_save_idle_lpm_delay(idle_lpm_delay_ms, use_default_idle_lpm_delay);
+        if (save_ret != ESP_OK) {
+            rlcd_give_lock(display);
+            return save_ret;
+        }
+
+        rlcd_cancel_idle_lpm_timer(display);
+        display->idle_lpm_delay_ms = idle_lpm_delay_ms;
+        esp_err_t timer_ret = ESP_OK;
+        if (!display->frame_content_changed) {
+            timer_ret = rlcd_schedule_idle_lpm_timer(display);
+        }
+        rlcd_give_lock(display);
+        return timer_ret;
+    }
+    if (option_ret != ESP_ERR_NOT_FOUND) {
+        rlcd_give_lock(display);
+        return option_ret;
+    }
+
+    uint8_t lpm_frame_rate = 0;
+    bool use_default_lpm_frame_rate = false;
+    option_ret =
+        rlcd_parse_lpm_frame_rate_option(mode, &lpm_frame_rate, &use_default_lpm_frame_rate);
+    if (option_ret == ESP_OK) {
+        (void)use_default_lpm_frame_rate;
+        const esp_err_t save_ret = rlcd_save_u8_tuning(RLCD_LPM_FRAME_RATE_NVS_KEY,
+                                                       lpm_frame_rate);
+        if (save_ret != ESP_OK) {
+            rlcd_give_lock(display);
+            return save_ret;
+        }
+
+        display->lpm_frame_rate = lpm_frame_rate;
+        const esp_err_t apply_ret = rlcd_apply_controller_tuning(display, false, true);
+        rlcd_give_lock(display);
+        return apply_ret;
+    }
+    if (option_ret != ESP_ERR_NOT_FOUND) {
+        rlcd_give_lock(display);
+        return option_ret;
+    }
+
+    uint8_t hpm_frame_rate = 0;
+    bool use_default_hpm_frame_rate = false;
+    option_ret =
+        rlcd_parse_hpm_frame_rate_option(mode, &hpm_frame_rate, &use_default_hpm_frame_rate);
+    if (option_ret == ESP_OK) {
+        (void)use_default_hpm_frame_rate;
+        const esp_err_t save_ret = rlcd_save_u8_tuning(RLCD_HPM_FRAME_RATE_NVS_KEY,
+                                                       hpm_frame_rate);
+        if (save_ret != ESP_OK) {
+            rlcd_give_lock(display);
+            return save_ret;
+        }
+
+        display->hpm_frame_rate = hpm_frame_rate;
+        const esp_err_t apply_ret = rlcd_apply_controller_tuning(display, true, true);
+        rlcd_give_lock(display);
+        return apply_ret;
+    }
+    if (option_ret != ESP_ERR_NOT_FOUND) {
+        rlcd_give_lock(display);
+        return option_ret;
+    }
+
+    uint8_t power_policy = RLCD_POWER_POLICY_AUTO;
+    option_ret = rlcd_parse_power_policy_option(mode, &power_policy);
+    if (option_ret == ESP_OK) {
+        const esp_err_t save_ret = rlcd_save_u8_tuning(RLCD_POWER_POLICY_NVS_KEY,
+                                                       power_policy);
+        if (save_ret != ESP_OK) {
+            rlcd_give_lock(display);
+            return save_ret;
+        }
+
+        display->power_policy = power_policy;
+        rlcd_cancel_idle_lpm_timer(display);
+        esp_err_t apply_ret = ESP_OK;
+        if (display->power_policy == RLCD_POWER_POLICY_AUTO && !display->frame_content_changed) {
+            apply_ret = rlcd_schedule_idle_lpm_timer(display);
+        } else {
+            apply_ret = rlcd_apply_frame_power_mode(display, display->frame_content_changed);
+        }
+        rlcd_give_lock(display);
+        return apply_ret;
+    }
+    if (option_ret != ESP_ERR_NOT_FOUND) {
+        rlcd_give_lock(display);
+        return option_ret;
+    }
+
+    bool inverted = true;
+    option_ret = rlcd_parse_inverted_option(mode, &inverted);
+    if (option_ret == ESP_OK) {
+        const esp_err_t save_ret = rlcd_save_u8_tuning(RLCD_INVERTED_NVS_KEY,
+                                                       inverted ? 1 : 0);
+        if (save_ret != ESP_OK) {
+            rlcd_give_lock(display);
+            return save_ret;
+        }
+
+        display->inverted = inverted;
+        const esp_err_t apply_ret = rlcd_apply_inversion(display);
+        rlcd_give_lock(display);
+        return apply_ret;
+    }
+    if (option_ret != ESP_ERR_NOT_FOUND) {
+        rlcd_give_lock(display);
+        return option_ret;
+    }
+
+    rlcd_give_lock(display);
+    return ESP_ERR_NOT_FOUND;
+}
+
+esp_err_t rlcd_st7305_set_high_refresh_override(rlcd_st7305_t *display,
+                                                bool enabled,
+                                                uint16_t hz_tenths)
+{
+    if (display == NULL || display->spi == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    const rlcd_hpm_frame_rate_value_t *rate =
+        enabled ? rlcd_hpm_frame_rate_for_hz(hz_tenths) : NULL;
+    if (enabled && rate == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!rlcd_take_lock(display, portMAX_DELAY)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (enabled && display->high_refresh_override) {
+        const esp_err_t ret = display->high_refresh_hz_tenths == hz_tenths
+                                  ? ESP_OK
+                                  : ESP_ERR_INVALID_STATE;
+        rlcd_give_lock(display);
+        return ret;
+    }
+    if (!enabled && !display->high_refresh_override) {
+        rlcd_give_lock(display);
+        return ESP_OK;
+    }
+
+    rlcd_cancel_idle_lpm_timer(display);
+    if (enabled) {
+        display->high_refresh_saved_hpm_frame_rate = display->hpm_frame_rate;
+        display->high_refresh_saved_power_policy = display->power_policy;
+        display->hpm_frame_rate = rate->setting;
+        display->power_policy = RLCD_POWER_POLICY_HPM;
+    } else {
+        display->hpm_frame_rate = display->high_refresh_saved_hpm_frame_rate;
+        display->power_policy = display->high_refresh_saved_power_policy;
+    }
+
+    esp_err_t ret = rlcd_apply_controller_tuning(display, true, true);
+    if (ret == ESP_OK) {
+        ret = rlcd_apply_frame_power_mode(display,
+                                          enabled || display->frame_content_changed);
+    }
+    if (ret == ESP_OK && !enabled &&
+        display->power_policy == RLCD_POWER_POLICY_AUTO &&
+        !display->frame_content_changed) {
+        ret = rlcd_schedule_idle_lpm_timer(display);
+    }
+
+    if (enabled && ret != ESP_OK) {
+        display->hpm_frame_rate = display->high_refresh_saved_hpm_frame_rate;
+        display->power_policy = display->high_refresh_saved_power_policy;
+        (void)rlcd_apply_controller_tuning(display, true, true);
+        (void)rlcd_apply_frame_power_mode(display, display->frame_content_changed);
+    }
+    if (ret == ESP_OK) {
+        display->high_refresh_override = enabled;
+        display->high_refresh_hz_tenths = enabled ? hz_tenths : 0;
+    } else if (!enabled) {
+        display->high_refresh_override = false;
+        display->high_refresh_hz_tenths = 0;
+    }
+    display->last_error = ret;
+    rlcd_give_lock(display);
+    return ret;
+}

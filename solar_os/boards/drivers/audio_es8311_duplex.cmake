@@ -1,0 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/i2c_esp_idf.cmake")
+
+set(SOLAR_OS_BOARD_AUDIO_DRIVER "es8311_duplex")
+set(SOLAR_OS_BOARD_AUDIO_NEEDS_I2C ON)
+list(APPEND SOLAR_OS_BOARD_REQUIRED_PACKAGES driver_audio_es8311_codecs)

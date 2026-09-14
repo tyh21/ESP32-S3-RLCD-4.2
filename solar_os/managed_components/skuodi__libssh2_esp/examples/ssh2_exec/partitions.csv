@@ -1,0 +1,7 @@
+# Name  , Type, SubType , Offset, Size, Flags
+nvs     , data, nvs     ,       , 64K , 
+otadata , data, ota     ,       , 8K  , 
+app0    , app , ota_0   ,       , 1M  , 
+app1    , app , ota_1   ,       , 1M  , 
+storage , data, littlefs,       , 1M  , 
+coredump, data, coredump,       , 64K , 

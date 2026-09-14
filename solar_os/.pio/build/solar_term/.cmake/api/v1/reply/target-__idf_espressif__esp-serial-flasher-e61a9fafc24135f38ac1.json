@@ -1,0 +1,885 @@
+{
+	"archive" : {},
+	"artifacts" : 
+	[
+		{
+			"path" : "esp-idf/espressif__esp-serial-flasher/libespressif__esp-serial-flasher.a"
+		}
+	],
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_library",
+			"idf_component_register",
+			"set_property",
+			"__component_set_dependencies",
+			"__component_set_all_dependencies",
+			"add_compile_options",
+			"add_c_compile_options",
+			"target_compile_options",
+			"component_compile_options",
+			"add_compile_definitions",
+			"target_compile_definitions",
+			"include_directories",
+			"target_include_directories",
+			"__component_add_include_dirs"
+		],
+		"files" : 
+		[
+			"/Users/tianyaohui/.platformio/packages/framework-espidf/tools/cmake/component.cmake",
+			"managed_components/espressif__esp-serial-flasher/CMakeLists.txt",
+			"/Users/tianyaohui/.platformio/packages/framework-espidf/tools/cmake/utilities.cmake"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 130,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 494,
+				"parent" : 1
+			},
+			{
+				"command" : 4,
+				"file" : 0,
+				"line" : 527,
+				"parent" : 1
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 365,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 344,
+				"parent" : 4
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 344,
+				"parent" : 4
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 344,
+				"parent" : 4
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 479,
+				"parent" : 1
+			},
+			{
+				"command" : 6,
+				"file" : 0,
+				"line" : 481,
+				"parent" : 1
+			},
+			{
+				"command" : 5,
+				"file" : 2,
+				"line" : 281,
+				"parent" : 9
+			},
+			{
+				"command" : 8,
+				"file" : 1,
+				"line" : 143,
+				"parent" : 0
+			},
+			{
+				"command" : 7,
+				"file" : 0,
+				"line" : 703,
+				"parent" : 11
+			},
+			{
+				"command" : 9,
+				"file" : 0,
+				"line" : 480,
+				"parent" : 1
+			},
+			{
+				"command" : 10,
+				"file" : 1,
+				"line" : 177,
+				"parent" : 0
+			},
+			{
+				"command" : 11,
+				"file" : 0,
+				"line" : 478,
+				"parent" : 1
+			},
+			{
+				"command" : 13,
+				"file" : 0,
+				"line" : 496,
+				"parent" : 1
+			},
+			{
+				"command" : 12,
+				"file" : 0,
+				"line" : 323,
+				"parent" : 16
+			},
+			{
+				"command" : 12,
+				"file" : 0,
+				"line" : 323,
+				"parent" : 16
+			},
+			{
+				"command" : 13,
+				"file" : 0,
+				"line" : 497,
+				"parent" : 1
+			},
+			{
+				"command" : 12,
+				"file" : 0,
+				"line" : 323,
+				"parent" : 19
+			},
+			{
+				"command" : 12,
+				"file" : 0,
+				"line" : 323,
+				"parent" : 19
+			},
+			{
+				"command" : 3,
+				"file" : 0,
+				"line" : 362,
+				"parent" : 3
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 347,
+				"parent" : 22
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 344,
+				"parent" : 4
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 344,
+				"parent" : 4
+			}
+		]
+	},
+	"compileGroups" : 
+	[
+		{
+			"compileCommandFragments" : 
+			[
+				{
+					"fragment" : "@\"/Users/tianyaohui/solar_os/.pio/build/solar_term/toolchain/cflags\" -fdiagnostics-color=always"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-ffunction-sections"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fdata-sections"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=unused-function"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=unused-variable"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=unused-but-set-variable"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=deprecated-declarations"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=extra"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-unused-parameter"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-sign-compare"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-enum-conversion"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-gdwarf-4"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-ggdb"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Os"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-freorder-blocks"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fmacro-prefix-map=/Users/tianyaohui/solar_os=."
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fmacro-prefix-map=/Users/tianyaohui/.platformio/packages/framework-espidf=/IDF"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fstrict-volatile-bitfields"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fno-jump-tables"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-fno-tree-switch-conversion"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=format"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=maybe-uninitialized"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=uninitialized"
+				},
+				{
+					"backtrace" : 8,
+					"fragment" : "-Wno-error=narrowing"
+				},
+				{
+					"backtrace" : 10,
+					"fragment" : "-std=gnu17"
+				},
+				{
+					"backtrace" : 10,
+					"fragment" : "-Wno-old-style-declaration"
+				},
+				{
+					"backtrace" : 12,
+					"fragment" : "-Wstrict-prototypes"
+				}
+			],
+			"defines" : 
+			[
+				{
+					"backtrace" : 13,
+					"define" : "ESP_IDF_LWIP_HOOK_FILENAME=\"/Users/tianyaohui/solar_os/src/services/solar_os_lwip_hooks.h\""
+				},
+				{
+					"backtrace" : 13,
+					"define" : "ESP_PLATFORM"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "IDF_VER=\"5.5.4\""
+				},
+				{
+					"backtrace" : 13,
+					"define" : "LIBSSH2_MBEDTLS"
+				},
+				{
+					"backtrace" : 14,
+					"define" : "SERIAL_FLASHER_BOOT_HOLD_TIME_MS=50"
+				},
+				{
+					"backtrace" : 14,
+					"define" : "SERIAL_FLASHER_BOOT_INVERT=false"
+				},
+				{
+					"backtrace" : 14,
+					"define" : "SERIAL_FLASHER_LOG_LEVEL=2"
+				},
+				{
+					"backtrace" : 14,
+					"define" : "SERIAL_FLASHER_RESET_HOLD_TIME_MS=100"
+				},
+				{
+					"backtrace" : 14,
+					"define" : "SERIAL_FLASHER_RESET_INVERT=false"
+				},
+				{
+					"backtrace" : 14,
+					"define" : "SERIAL_FLASHER_WRITE_BLOCK_RETRIES=3"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "SOC_MMU_PAGE_SIZE=CONFIG_MMU_PAGE_SIZE"
+				},
+				{
+					"backtrace" : 2,
+					"define" : "SOC_XTAL_FREQ_MHZ=CONFIG_XTAL_FREQ"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "_GLIBCXX_HAVE_POSIX_SEMAPHORE"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "_GLIBCXX_USE_POSIX_SEMAPHORE"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "_GNU_SOURCE"
+				},
+				{
+					"backtrace" : 13,
+					"define" : "_POSIX_READER_WRITER_LOCKS"
+				}
+			],
+			"includes" : 
+			[
+				{
+					"backtrace" : 15,
+					"path" : "/Users/tianyaohui/solar_os/.pio/build/solar_term/config"
+				},
+				{
+					"backtrace" : 17,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__esp-serial-flasher/include"
+				},
+				{
+					"backtrace" : 18,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__esp-serial-flasher/port"
+				},
+				{
+					"backtrace" : 20,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__esp-serial-flasher/private_include"
+				},
+				{
+					"backtrace" : 21,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__esp-serial-flasher/port/common"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/newlib/platform_include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/config/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/config/include/freertos"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/config/xtensa/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/FreeRTOS-Kernel/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/FreeRTOS-Kernel/portable/xtensa/include/freertos"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/freertos/esp_additions/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/include/soc"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/include/soc/esp32s3"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/dma/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/ldo/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/debug_probe/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/mspi_timing_tuning/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/mspi_timing_tuning/tuning_scheme_impl/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/power_supply/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/port/esp32s3/."
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/port/esp32s3/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/."
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_hw_support/mspi_timing_tuning/port/esp32s3/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/heap/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/heap/tlsf"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/log/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/soc/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/soc/esp32s3"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/soc/esp32s3/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/soc/esp32s3/register"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/hal/platform_port/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/hal/esp32s3/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/hal/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_rom/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_rom/esp32s3/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_rom/esp32s3/include/esp32s3"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_rom/esp32s3"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_common/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_system/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_system/port/soc"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_system/port/include/private"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/xtensa/esp32s3/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/xtensa/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/xtensa/deprecated_include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_timer/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/include/apps"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/include/apps/sntp"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/lwip/src/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/port/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/port/freertos/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/port/esp32xx/include"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/port/esp32xx/include/arch"
+				},
+				{
+					"backtrace" : 2,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/lwip/port/esp32xx/include/sys"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_driver_sdmmc/include"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/sdmmc/include"
+				},
+				{
+					"backtrace" : 23,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_driver_gpio/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_driver_uart/include"
+				},
+				{
+					"backtrace" : 24,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/vfs/include"
+				},
+				{
+					"backtrace" : 25,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_driver_spi/include"
+				},
+				{
+					"backtrace" : 25,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/esp_pm/include"
+				},
+				{
+					"backtrace" : 5,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__usb_host_cdc_acm/include"
+				},
+				{
+					"backtrace" : 5,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__usb_host_cdc_acm/interface"
+				},
+				{
+					"backtrace" : 5,
+					"path" : "/Users/tianyaohui/.platformio/packages/framework-espidf/components/usb/include"
+				},
+				{
+					"backtrace" : 6,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__usb_host_ch34x_vcp/include"
+				},
+				{
+					"backtrace" : 7,
+					"path" : "/Users/tianyaohui/solar_os/managed_components/espressif__usb_host_cp210x_vcp/include"
+				}
+			],
+			"language" : "C",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22
+			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 2,
+			"id" : "__idf_xtensa::@1daaaad7abe597e030f9"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "__idf_usb::@4a2418067d0bb57af462"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "__idf_espressif__usb_host_cdc_acm::@82577517a36ced779a7d"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "__idf_espressif__usb_host_ch34x_vcp::@f3fdffd547f01b247ae1"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "__idf_espressif__usb_host_cp210x_vcp::@81b9dfc02b689c69075d"
+		}
+	],
+	"id" : "__idf_espressif__esp-serial-flasher::@af5f6187507f6c3e241e",
+	"name" : "__idf_espressif__esp-serial-flasher",
+	"nameOnDisk" : "libespressif__esp-serial-flasher.a",
+	"paths" : 
+	{
+		"build" : "esp-idf/espressif__esp-serial-flasher",
+		"source" : "managed_components/espressif__esp-serial-flasher"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "Source Files",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2,
+				3,
+				4,
+				5,
+				6,
+				7,
+				8,
+				9,
+				10,
+				11,
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/md5_hash.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/esp_loader.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/esp_targets.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stubs_table.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp8266.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32s2.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32c3.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32s3.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32c2.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32c5.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32h2.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32c6.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32p4.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32p4rev1.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/stubs/esp_stub_esp32c61.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/protocol_serial.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/protocol_uart.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/protocol_spi.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/protocol_sdio.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/src/slip.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/port/common/loader_port_stdio_log.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 2,
+			"compileGroupIndex" : 0,
+			"path" : "managed_components/espressif__esp-serial-flasher/port/esp32_port.c",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "STATIC_LIBRARY"
+}

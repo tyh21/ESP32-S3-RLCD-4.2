@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "esp-idf/skuodi__libssh2_esp",
+		"source" : "managed_components/skuodi__libssh2_esp"
+	}
+}

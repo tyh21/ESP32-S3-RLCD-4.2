@@ -1,0 +1,7 @@
+version: "1.16.0-solaros.1"
+description: "Audited minimal MeshCore protocol core for SolarOS"
+repository: "https://github.com/meshcore-dev/MeshCore"
+url: "https://github.com/meshcore-dev/MeshCore/tree/03b6ef4b0de98fc70b49ef10a6d0d61f8381fb7a"
+license: "MIT"
+x-solaros-upstream-commit: "03b6ef4b0de98fc70b49ef10a6d0d61f8381fb7a"
+x-solaros-crypto-version: "rweather/Crypto 0.4.0"
