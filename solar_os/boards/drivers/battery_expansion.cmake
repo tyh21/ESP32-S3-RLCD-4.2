@@ -1,1 +1,0 @@
-set(SOLAR_OS_BOARD_BATTERY_DRIVER "expansion")

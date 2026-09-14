@@ -1,3 +1,0 @@
--Wl,-Map=/Users/tianyaohui/solar_os/.pio/build/solar_term/firmware.map
--nostartfiles
--fno-rtti

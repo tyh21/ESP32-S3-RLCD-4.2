@@ -1,3 +1,0 @@
-#pragma once
-
-#define SOLAR_OS_EXPANSION_DRIVER_SYMBOLS(X)
